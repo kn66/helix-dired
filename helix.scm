@@ -54,6 +54,7 @@
 (define *dired-command-stdout* "/tmp/helix-dired.stdout")
 (define *dired-command-stderr* "/tmp/helix-dired.stderr")
 (define *dired-keybindings-installed?* #false)
+(define *dired-rendered-text* "")
 
 ;;@doc
 ;; Install helix-dired keybindings for the generated dired buffer.
@@ -171,20 +172,45 @@
     (display "\n" port)
     (close-port port)))
 
+(define (lines->text lines)
+  (string-append (string-join lines "\n") "\n"))
+
 (define (render-dired!)
   (let* ([entries (build-entries *dired-root* 0)]
          [lines (render-lines entries)])
     (set! *dired-line-paths* (line-map entries))
+    (set! *dired-rendered-text* (lines->text lines))
     (write-lines *dired-buffer-path* lines)))
+
+(define (current-doc-id)
+  (editor->doc-id (editor-focus)))
+
+(define (map-current-dired-buffer!)
+  (with-handler
+    (lambda (_) #false)
+    (let ([doc-id (current-doc-id)])
+      (set-scratch-buffer-name! DIRED)
+      (keymaps.*reverse-buffer-map-insert* (doc-id->usize doc-id) DIRED))))
 
 (define (open-dired-buffer!)
   (helix.open *dired-buffer-path*)
+  (map-current-dired-buffer!))
+
+(define (reload-dired-buffer!)
   (with-handler
-    (lambda (_) #false)
-    (let* ([focus (editor-focus)]
-           [doc-id (editor->doc-id focus)])
-      (set-scratch-buffer-name! DIRED)
-      (keymaps.*reverse-buffer-map-insert* (doc-id->usize doc-id) DIRED))))
+    (lambda (_) (open-dired-buffer!))
+    (editor-document-reload (current-doc-id))
+    (map-current-dired-buffer!)))
+
+(define (replace-current-dired-buffer!)
+  (with-handler
+    (lambda (_) (reload-dired-buffer!))
+    (let ([line (+ (get-current-line-number) 1)])
+      (select_all)
+      (replace-selection-with *dired-rendered-text*)
+      (helix.goto-line line)
+      (normal_mode)
+      (map-current-dired-buffer!))))
 
 ;;@doc
 ;; Open a Dired-like file manager rooted at PATH or the current directory.
@@ -233,7 +259,7 @@
   (if *dired-root*
       (begin
         (render-dired!)
-        (open-dired-buffer!)
+        (replace-current-dired-buffer!)
         (set-status! "dired refreshed"))
       (set-error! "dired is not open")))
 
