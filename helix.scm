@@ -55,6 +55,7 @@
 (define *dired-command-stderr* "/tmp/helix-dired.stderr")
 (define *dired-keybindings-installed?* #false)
 (define *dired-rendered-text* "")
+(define *dired-header-prefix* "helix-dired: ")
 
 ;;@doc
 ;; Install helix-dired keybindings for the generated dired buffer.
@@ -157,7 +158,7 @@
 
 (define (render-lines entries)
   (append
-    (list (string-append "helix-dired: " *dired-root*)
+    (list (string-append *dired-header-prefix* *dired-root*)
           "RET open/toggle  m mark  u unmark  n f file  n d dir  y copy  x move  p paste  r rename  D delete  g refresh"
           "")
     (map entry-line entries)))
@@ -184,6 +185,31 @@
 
 (define (current-doc-id)
   (editor->doc-id (editor-focus)))
+
+(define (file->string path)
+  (let* ([port (open-input-file path)]
+         [content (read-port-to-string port)])
+    (close-input-port port)
+    content))
+
+(define (first-line value)
+  (let ([parts (split-once value "\n")])
+    (if parts (car parts) value)))
+
+(define (restore-root-from-buffer!)
+  (when (and (not *dired-root*) (path-exists? *dired-buffer-path*))
+    (let* ([line (first-line (file->string *dired-buffer-path*))]
+           [prefix-len (string-length *dired-header-prefix*)])
+      (when (and (>= (string-length line) prefix-len)
+                 (starts-with? line *dired-header-prefix*))
+        (let ([root (substring line prefix-len (string-length line))])
+          (when (and (path-exists? root) (is-dir? root))
+            (set! *dired-root* root)))))))
+
+(define (ensure-dired-line-map!)
+  (restore-root-from-buffer!)
+  (when (and *dired-root* (null? *dired-line-paths*))
+    (render-dired!)))
 
 (define (map-current-dired-buffer!)
   (with-handler
@@ -233,11 +259,20 @@
 (define (dired-current-directory)
   (dired (current-directory-path)))
 
+(define (path-at-line line)
+  (if (and (>= line 0) (< line (length *dired-line-paths*)))
+      (list-ref *dired-line-paths* line)
+      #false))
+
 (define (current-dired-path)
-  (let ([line (get-current-line-number)])
-    (if (< line (length *dired-line-paths*))
-        (list-ref *dired-line-paths* line)
-        #false)))
+  (ensure-dired-line-map!)
+  (let* ([line (get-current-line-number)]
+         [exact (path-at-line line)])
+    (cond
+      [exact exact]
+      [(path-at-line (- line 1)) (path-at-line (- line 1))]
+      [(path-at-line (+ line 1)) (path-at-line (+ line 1))]
+      [else #false])))
 
 (define (selected-paths)
   (let ([current (current-dired-path)])
