@@ -1,6 +1,7 @@
 (require "helix/static.scm")
 (require "helix/editor.scm")
 (require "helix/misc.scm")
+(require (prefix-in keymaps. "helix/keymaps.scm"))
 (require (prefix-in helix. "helix/commands.scm"))
 (require "steel/result")
 (require-builtin steel/filesystem)
@@ -8,6 +9,7 @@
 
 (provide DIRED
          DIRED-KEYBINDINGS
+         dired-install-keybindings
          dired
          dired-current-directory
          dired-refresh
@@ -51,6 +53,17 @@
 (define *dired-buffer-path* "/tmp/helix-dired")
 (define *dired-command-stdout* "/tmp/helix-dired.stdout")
 (define *dired-command-stderr* "/tmp/helix-dired.stderr")
+(define *dired-keybindings-installed?* #false)
+
+;;@doc
+;; Install helix-dired keybindings for the generated dired buffer.
+(define (dired-install-keybindings)
+  (unless *dired-keybindings-installed?*
+    (let ([base (keymaps.deep-copy-global-keybindings)])
+      (keymaps.merge-keybindings base DIRED-KEYBINDINGS)
+      (keymaps.set-global-buffer-or-extension-keymap (hash DIRED base))
+      (set! *dired-keybindings-installed?* #true)
+      "installed helix-dired keybindings")))
 
 (define (path-join . parts)
   (cond
@@ -168,7 +181,10 @@
   (helix.open *dired-buffer-path*)
   (with-handler
     (lambda (_) #false)
-    (set-scratch-buffer-name! DIRED)))
+    (let* ([focus (editor-focus)]
+           [doc-id (editor->doc-id focus)])
+      (set-scratch-buffer-name! DIRED)
+      (keymaps.*reverse-buffer-map-insert* (doc-id->usize doc-id) DIRED))))
 
 ;;@doc
 ;; Open a Dired-like file manager rooted at PATH or the current directory.
@@ -178,6 +194,7 @@
       (error (string-append "dired root does not exist: " root)))
     (unless (is-dir? root)
       (error (string-append "dired root is not a directory: " root)))
+    (dired-install-keybindings)
     (set! *dired-root* root)
     (set! *dired-expanded* '())
     (set! *dired-marked* '())

@@ -29,6 +29,7 @@ Expose the commands from your `helix.scm`:
 (require (only-in "path/to/helix-dired/helix.scm"
                   DIRED
                   DIRED-KEYBINDINGS
+                  dired-install-keybindings
                   dired
                   dired-current-directory
                   dired-refresh
@@ -47,6 +48,7 @@ Expose the commands from your `helix.scm`:
 
 (provide dired
          dired-current-directory
+         dired-install-keybindings
          dired-refresh
          dired-open
          dired-toggle
@@ -62,7 +64,15 @@ Expose the commands from your `helix.scm`:
          dired-delete)
 ```
 
-Optional keymap setup:
+The plugin installs its Dired buffer keymap automatically when `:dired` opens.
+If you want to install it eagerly during startup, add this to `init.scm` after
+loading the plugin:
+
+```scheme
+(dired-install-keybindings)
+```
+
+Manual keymap setup is also possible:
 
 ```scheme
 (require "cogs/keymaps.scm")
